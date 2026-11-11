@@ -27,6 +27,14 @@ final class KeyTap {
     var setArmed: (Bool) -> Void = { _ in }
     /// Whether Space consumes a character.
     var spaceConsumes = true
+    /// Type with real key codes (current layout) instead of Unicode-string events.
+    var compatibilityMode = false
+    /// Apps that are known to ignore Unicode-string key events (VMs, remote desktop).
+    private static let keyCodeApps: Set<String> = [
+        "com.parallels.desktop.console", "com.vmware.fusion", "com.utmapp.UTM",
+        "org.virtualbox.app.VirtualBoxVM", "com.microsoft.rdc.macos", "com.microsoft.rdc.mac",
+        "com.apple.ScreenSharing", "com.teamviewer.TeamViewer", "com.citrix.receiver.nomas",
+    ]
     /// Backspace deletes as usual and also steps the text pointer back.
     var backspaceStepsBack = false
     var stepBack: () -> Void = {}
@@ -65,6 +73,17 @@ final class KeyTap {
         tap = port
         source = src
         return true
+    }
+
+    /// Re-enables the tap if macOS disabled it (timeouts, wake from sleep).
+    func ensureEnabled() {
+        guard let tap, !CGEvent.tapIsEnabled(tap: tap) else { return }
+        CGEvent.tapEnable(tap: tap, enable: true)
+    }
+
+    func restart() {
+        stop()
+        start()
     }
 
     func stop() {
@@ -166,6 +185,8 @@ final class KeyTap {
             postKey(code: Self.returnKeyCode, source: source)
         } else if ch == "\t" {
             postKey(code: Self.tabKeyCode, source: source)
+        } else if useKeyCodes, let stroke = LayoutMap.keyStroke(for: ch) {
+            postKey(code: stroke.code, flags: stroke.shift ? .maskShift : [], source: source)
         } else {
             let utf16 = Array(String(ch).utf16)
             for down in [true, false] {
@@ -179,10 +200,16 @@ final class KeyTap {
         }
     }
 
-    private func postKey(code: CGKeyCode, source: CGEventSource?) {
+    private var useKeyCodes: Bool {
+        if compatibilityMode { return true }
+        guard let id = NSWorkspace.shared.frontmostApplication?.bundleIdentifier else { return false }
+        return Self.keyCodeApps.contains(id)
+    }
+
+    private func postKey(code: CGKeyCode, flags: CGEventFlags = [], source: CGEventSource?) {
         for down in [true, false] {
             guard let e = CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: down) else { continue }
-            e.flags = []
+            e.flags = flags
             e.setIntegerValueField(.eventSourceUserData, value: Self.marker)
             e.post(tap: .cgSessionEventTap)
         }
