@@ -12,7 +12,7 @@ See [docs/](docs/) for the plan and the Windows/stack notes.
 | 4 Arm key recorder, Caps Lock mode, panic disarm | done |
 | 5 Settings and polish | done |
 | 6 Hardening (wake recovery, key-code fallback, secure input, smoke tests) | done (manual checklist in docs/03-testing.md) |
-| 7 Sign, notarize, DMG | todo |
+| 7 Sign, notarize, DMG | DMG script done; notarization waits on a Developer ID certificate (docs/04-release.md) |
 
 ## Build
 Needs Xcode and [XcodeGen](https://github.com/yonaskolb/XcodeGen).
@@ -23,5 +23,7 @@ xcodebuild -project Feeder.xcodeproj -scheme Feeder -derivedDataPath build test
 xcodebuild -project Feeder.xcodeproj -scheme Feeder -derivedDataPath build build
 open build/Build/Products/Debug/Feeder.app
 ```
+
+Package a DMG with `scripts/release.sh`.
 
 On first launch grant **Accessibility** and **Input Monitoring** from the menu bar popover. Panic disarm: Ctrl+Opt+Cmd+Esc.
