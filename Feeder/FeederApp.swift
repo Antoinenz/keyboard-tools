@@ -4,11 +4,16 @@ import SwiftUI
 struct FeederApp: App {
     @StateObject private var state = AppState()
 
+    private var menuBarSymbol: String {
+        if !state.tapRunning { return "exclamationmark.triangle" } // permissions missing
+        return state.armed ? "keyboard.fill" : "keyboard"
+    }
+
     var body: some Scene {
         MenuBarExtra {
             PopoverView().environmentObject(state)
         } label: {
-            Image(systemName: state.armed ? "keyboard.fill" : "keyboard")
+            Image(systemName: menuBarSymbol)
         }
         .menuBarExtraStyle(.window)
 
