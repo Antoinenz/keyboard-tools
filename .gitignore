@@ -1,0 +1,12 @@
+# AI tooling
+CLAUDE.md
+.claude/
+.cursor/
+
+# macOS / Xcode
+.DS_Store
+build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+.swiftpm/
