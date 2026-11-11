@@ -11,6 +11,9 @@ final class KeyTap {
     private static let capsLockKeyCode: Int64 = 57
     private static let returnKeyCode: CGKeyCode = 36
     private static let tabKeyCode: CGKeyCode = 48
+    private static let escapeKeyCode: Int64 = 53
+    /// Always disarms, whatever the arm key is set to.
+    private static let panicFlags: CGEventFlags = [.maskControl, .maskAlternate, .maskCommand]
 
     private var tap: CFMachPort?
     private var source: CFRunLoopSource?
@@ -21,8 +24,12 @@ final class KeyTap {
     var nextCharacter: () -> Character? = { nil }
     var isArmed: () -> Bool = { false }
     var setArmed: (Bool) -> Void = { _ in }
-    /// Spike setting: whether Space consumes a character.
+    /// Whether Space consumes a character.
     var spaceConsumes = true
+    /// What arms/disarms the feeder.
+    var armKey: ArmKey = .capsLock
+    /// True while the user is recording a new arm key in Settings.
+    var hotkeysSuspended = false
 
     var isRunning: Bool { tap != nil }
 
@@ -80,8 +87,8 @@ final class KeyTap {
         let code = event.getIntegerValueField(.keyboardEventKeycode)
 
         if type == .flagsChanged {
-            // Spike: Caps Lock state drives armed state.
-            if code == Self.capsLockKeyCode {
+            // Caps Lock mode: the Caps Lock state is the armed state.
+            if code == Self.capsLockKeyCode, armKey == .capsLock, !hotkeysSuspended {
                 setArmed(event.flags.contains(.maskAlphaShift))
             }
             return pass
@@ -92,7 +99,29 @@ final class KeyTap {
             return swallowed.remove(code) != nil ? nil : pass
         }
 
-        guard type == .keyDown, isArmed() else { return pass }
+        guard type == .keyDown else { return pass }
+
+        let autorepeat = event.getIntegerValueField(.keyboardEventAutorepeat) != 0
+        if autorepeat, swallowed.contains(code) { return nil }
+
+        let mods = event.flags.intersection(ArmKey.modifierMask)
+
+        // Panic combo: always disarms.
+        if code == Self.escapeKeyCode, mods == Self.panicFlags {
+            setArmed(false)
+            swallowed.insert(code)
+            return nil
+        }
+        // Arm combo: toggles.
+        if !hotkeysSuspended,
+           case let .combo(keyCode, modifiers, _) = armKey,
+           code == keyCode, mods.rawValue == modifiers {
+            setArmed(!isArmed())
+            swallowed.insert(code)
+            return nil
+        }
+
+        guard isArmed() else { return pass }
 
         // Let the app's own windows (the paste box) work normally.
         if NSWorkspace.shared.frontmostApplication?.bundleIdentifier == Bundle.main.bundleIdentifier {
@@ -102,9 +131,7 @@ final class KeyTap {
         if event.flags.contains(.maskCommand) || event.flags.contains(.maskControl) { return pass }
         guard isCharacterKey(code) else { return pass }
 
-        if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 {
-            return swallowed.contains(code) ? nil : pass
-        }
+        if autorepeat { return pass }
 
         guard let ch = nextCharacter() else { return pass } // finished: type normally
         swallowed.insert(code)
