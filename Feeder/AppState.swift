@@ -1,5 +1,6 @@
 import SwiftUI
 import ServiceManagement
+import Carbon.HIToolbox
 
 @MainActor
 final class AppState: ObservableObject {
@@ -51,6 +52,15 @@ final class AppState: ObservableObject {
             keyTap.ignoreAutoRepeat = ignoreAutoRepeat
         }
     }
+    @Published var compatibilityMode: Bool = AppState.bool("compatibilityMode", false) {
+        didSet {
+            UserDefaults.standard.set(compatibilityMode, forKey: "compatibilityMode")
+            keyTap.compatibilityMode = compatibilityMode
+        }
+    }
+    /// True while some app has Secure Event Input on (e.g. a password field is focused):
+    /// macOS hides keystrokes from Feeder then, so typing passes through untouched.
+    @Published private(set) var secureInputActive = false
     @Published var soundOnArm: Bool = AppState.bool("soundOnArm", true) {
         didSet { UserDefaults.standard.set(soundOnArm, forKey: "soundOnArm") }
     }
@@ -84,7 +94,18 @@ final class AppState: ObservableObject {
         keyTap.spaceConsumes = spaceConsumes
         keyTap.backspaceStepsBack = backspaceStepsBack
         keyTap.ignoreAutoRepeat = ignoreAutoRepeat
+        keyTap.compatibilityMode = compatibilityMode
+        #if DEBUG
+        // Test hooks: launch with `-FeederDebugText "..." -FeederDebugArmed YES`.
+        if let t = UserDefaults.standard.string(forKey: "FeederDebugText") { text = t }
+        if UserDefaults.standard.bool(forKey: "FeederDebugArmed") { armed = true }
+        #endif
         refreshPermissions()
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in self?.handleWake() }
+        }
         // Poll so the UI and the tap react as soon as the user grants access.
         pollTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.refreshPermissions() }
@@ -100,7 +121,16 @@ final class AppState: ObservableObject {
             keyTap.stop()
             armed = false
         }
+        keyTap.ensureEnabled()
         tapRunning = keyTap.isRunning
+        secureInputActive = IsSecureEventInputEnabled()
+    }
+
+    /// After sleep the tap can be left dead; recreate it and drop any stale armed state
+    /// that depended on a key that may have been released while asleep.
+    private func handleWake() {
+        if keyTap.isRunning { keyTap.restart() }
+        refreshPermissions()
     }
 
     func setLaunchAtLogin(_ on: Bool) {

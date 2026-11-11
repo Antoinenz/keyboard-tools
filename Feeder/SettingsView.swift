@@ -37,6 +37,9 @@ struct SettingsView: View {
                 Toggle("Space types the next character", isOn: $state.spaceConsumes)
                 Toggle("Backspace deletes and steps the text back", isOn: $state.backspaceStepsBack)
                 Toggle("Holding a key types once (ignore auto-repeat)", isOn: $state.ignoreAutoRepeat)
+                Toggle("Compatibility mode (type with key codes)", isOn: $state.compatibilityMode)
+                Text("Turn on if an app ignores Feeder's typing. Remote desktop and VM apps switch to it automatically. Characters your layout can't type still use the normal method.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
             Section("At the end of the text") {
                 Toggle("Start over from the beginning", isOn: $state.loopAtEnd)

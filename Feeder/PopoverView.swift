@@ -10,6 +10,12 @@ struct PopoverView: View {
                 permissionsSection
             }
 
+            if state.secureInputActive {
+                Label("Secure input is on (for example a password field is focused). Feeder can't see keys while it is, so you type normally.",
+                      systemImage: "lock.fill")
+                    .font(.caption).foregroundStyle(.orange)
+            }
+
             Text("Text to type").font(.headline)
             TextEditor(text: $state.text)
                 .font(.body.monospaced())
