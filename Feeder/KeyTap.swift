@@ -1,16 +1,22 @@
 import AppKit
 import CoreGraphics
 
-/// Owns the CGEventTap. While armed, character keypresses are swallowed and replaced
-/// by the next character of the feeder's text.
+/// Owns the CGEventTap. While armed, each character keypress is rewritten in place so it
+/// types the next character of the feeder's text instead. Rewriting the real event (rather
+/// than swallowing it and posting a new one) keeps it in order with every other key event.
 ///
 /// Runs on the main run loop, so the callback is always on the main thread.
 final class KeyTap {
-    /// Marker stamped on events we post, so the tap ignores its own output.
-    private static let marker: Int64 = 0x46454544 // "FEED"
     private static let capsLockKeyCode: Int64 = 57
     private static let returnKeyCode: CGKeyCode = 36
     private static let tabKeyCode: CGKeyCode = 48
+
+    /// How a physical key is rewritten while we are typing a character in its place.
+    private struct Replacement {
+        var unicode: [UniChar]
+        var keyCode: CGKeyCode?   // nil keeps the physical key's code
+        var flags: CGEventFlags
+    }
     private static let escapeKeyCode: Int64 = 53
     private static let deleteKeyCode: Int64 = 51
     /// Always disarms, whatever the arm key is set to.
@@ -18,8 +24,10 @@ final class KeyTap {
 
     private var tap: CFMachPort?
     private var source: CFRunLoopSource?
-    /// Key codes whose key-down we swallowed, so we also swallow the matching key-up.
+    /// Hotkey presses (arm / panic) we swallowed, so their key-up and auto-repeats go too.
     private var swallowed = Set<Int64>()
+    /// Physical keys currently held that we rewrote, so the key-up is rewritten to match.
+    private var rewritten = [Int64: Replacement]()
 
     /// Called on the main thread. Return the next character, or nil if the text is finished.
     var nextCharacter: () -> Character? = { nil }
@@ -92,6 +100,7 @@ final class KeyTap {
         tap = nil
         source = nil
         swallowed.removeAll()
+        rewritten.removeAll()
     }
 
     // MARK: - Event handling
@@ -107,8 +116,6 @@ final class KeyTap {
             break
         }
 
-        if event.getIntegerValueField(.eventSourceUserData) == Self.marker { return pass }
-
         let code = event.getIntegerValueField(.keyboardEventKeycode)
 
         if type == .flagsChanged {
@@ -120,8 +127,9 @@ final class KeyTap {
         }
 
         if type == .keyUp {
-            // Swallow the key-up of any key whose key-down we swallowed.
-            return swallowed.remove(code) != nil ? nil : pass
+            if swallowed.remove(code) != nil { return nil }
+            if let r = rewritten.removeValue(forKey: code) { apply(r, to: event) }
+            return pass
         }
 
         guard type == .keyDown else { return pass }
@@ -162,13 +170,14 @@ final class KeyTap {
         guard isCharacterKey(code) else { return pass }
 
         if autorepeat, ignoreAutoRepeat {
-            return swallowed.contains(code) ? nil : pass
+            return rewritten[code] != nil ? nil : pass
         }
 
         guard let ch = nextCharacter() else { return pass } // finished: type normally
-        swallowed.insert(code)
-        post(ch)
-        return nil
+        let r = replacement(for: ch)
+        rewritten[code] = r
+        apply(r, to: event)
+        return pass
     }
 
     /// ANSI printable keys (0...50) minus Return and Tab; Space (49) is optional.
@@ -177,41 +186,30 @@ final class KeyTap {
         return code != 49 || spaceConsumes
     }
 
-    // MARK: - Injection
+    // MARK: - Rewriting
 
-    private func post(_ ch: Character) {
-        let source = CGEventSource(stateID: .privateState)
-        if ch.isNewline {
-            postKey(code: Self.returnKeyCode, source: source)
-        } else if ch == "\t" {
-            postKey(code: Self.tabKeyCode, source: source)
-        } else if useKeyCodes, let stroke = LayoutMap.keyStroke(for: ch) {
-            postKey(code: stroke.code, flags: stroke.shift ? .maskShift : [], source: source)
-        } else {
-            let utf16 = Array(String(ch).utf16)
-            for down in [true, false] {
-                guard let e = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: down) else { continue }
-                var chars = utf16
-                e.keyboardSetUnicodeString(stringLength: chars.count, unicodeString: &chars)
-                e.flags = []
-                e.setIntegerValueField(.eventSourceUserData, value: Self.marker)
-                e.post(tap: .cgSessionEventTap)
-            }
+    private func replacement(for ch: Character) -> Replacement {
+        if ch.isNewline { return Replacement(unicode: [13], keyCode: Self.returnKeyCode, flags: []) }
+        if ch == "\t" { return Replacement(unicode: [9], keyCode: Self.tabKeyCode, flags: []) }
+        let unicode = Array(String(ch).utf16)
+        if useKeyCodes, let stroke = LayoutMap.keyStroke(for: ch) {
+            return Replacement(unicode: unicode, keyCode: stroke.code, flags: stroke.shift ? .maskShift : [])
         }
+        return Replacement(unicode: unicode, keyCode: nil, flags: [])
+    }
+
+    private func apply(_ r: Replacement, to event: CGEvent) {
+        if let code = r.keyCode {
+            event.setIntegerValueField(.keyboardEventKeycode, value: Int64(code))
+        }
+        event.flags = r.flags
+        var chars = r.unicode
+        event.keyboardSetUnicodeString(stringLength: chars.count, unicodeString: &chars)
     }
 
     private var useKeyCodes: Bool {
         if compatibilityMode { return true }
         guard let id = NSWorkspace.shared.frontmostApplication?.bundleIdentifier else { return false }
         return Self.keyCodeApps.contains(id)
-    }
-
-    private func postKey(code: CGKeyCode, flags: CGEventFlags = [], source: CGEventSource?) {
-        for down in [true, false] {
-            guard let e = CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: down) else { continue }
-            e.flags = flags
-            e.setIntegerValueField(.eventSourceUserData, value: Self.marker)
-            e.post(tap: .cgSessionEventTap)
-        }
     }
 }
