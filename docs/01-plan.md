@@ -1,27 +1,32 @@
-# Plan: Feeder (macOS menu bar app)
+# Design: Feeder (macOS menu bar app)
+
+Originally the plan; updated to describe what was built.
 
 ## How it works
 1. A CGEventTap (session level) watches key-down, key-up and flags-changed events.
 2. Disarmed: every event passes through untouched.
-3. Armed: a real character keypress is swallowed (callback returns nil) and a synthetic key event carrying the next character is posted via `CGEvent.keyboardSetUnicodeString`.
-4. The matching key-up is swallowed too, so apps never see an unpaired event.
-5. Synthetic events carry a marker in `eventSourceUserData` so the tap ignores its own output.
+3. Armed: a real character keypress is rewritten in place: its Unicode string (and, in compatibility mode, key code and Shift) is replaced with the next character via `CGEvent.keyboardSetUnicodeString`.
+4. The matching key-up is rewritten the same way, so apps never see an unpaired event.
+5. Rewriting the real event, rather than swallowing it and posting a new one, keeps strict ordering with other keys. (The first version posted synthetic events and reordered under fast typing; see docs/03-testing.md.)
+6. Only hotkey presses (arm combo, panic) are swallowed.
 
 ## Permissions and distribution
 - Input Monitoring (see keystrokes) and Accessibility (an active tap that swallows/injects events).
-- Not sandboxed (event taps do not work in the sandbox). Distribute outside the App Store: Developer ID, notarized.
+- Not sandboxed (event taps do not work in the sandbox), so no App Store. Distributed as a DMG signed with an Apple Development identity and not notarized; see docs/04-release.md.
 - First-run onboarding checks `AXIsProcessTrusted` and `CGPreflightListenEventAccess`, deep-links to System Settings, re-checks live.
 - Use a stable signing identity in development: TCC grants are tied to the code signature.
 
 ## Components
 | Piece | Job |
 |---|---|
-| KeyTap | Owns the tap on a background run loop; re-enables on `tapDisabledByTimeout` and after wake; decides pass / swallow / inject. |
+| KeyTap | Owns the tap on the main run loop; re-enables on `tapDisabledByTimeout` and after wake; decides pass / swallow / rewrite. |
 | TextFeeder | Text as grapheme clusters plus index: next(), back(), reset(), loop / end behaviour. Platform-independent. |
-| ArmController | Armed state driven by the arm keybind; sound/HUD feedback. |
-| HotkeyStore | Persists the keybind (keycode, modifiers, or caps-lock mode). |
+| ArmKey / HotkeyStore | The arm keybind (Caps Lock or a combo) and its persistence. |
+| KeyRecorder | Records a new arm key in Settings. |
+| LayoutMap | Character to key code (+Shift) for the current layout, for compatibility mode. |
+| AppState | Armed state, preferences, permission polling, wake handling. |
 | Permissions | Checks and deep links. |
-| UI | MenuBarExtra (window style) and Settings scene. |
+| UI | MenuBarExtra (window style) and a Settings window. |
 
 ## UI
 - Agent app (`LSUIElement = true`), no Dock icon; menu bar icon changes when armed.
@@ -47,16 +52,16 @@
 - Key auto-repeat ignored by default.
 - Privacy: text stays in memory; keystrokes never logged or sent anywhere.
 
-## Milestones
+## Milestones (all done for v0.1.0)
 1. Scaffold: menu bar agent, popover, permission onboarding.
-2. Tap + injection spike with a hardcoded arm key.
+2. Tap and injection spike.
 3. Feeder model (newlines, Unicode, back, reset) with unit tests.
 4. Keybind recorder, Caps Lock mode, panic disarm.
 5. Settings and polish (toggles, launch at login, icon states, sound).
-6. Hardening: sleep/wake, tap timeout, layout fallback; manual tests in TextEdit, Safari, Terminal, VS Code.
-7. Sign, notarize, DMG.
+6. Hardening: wake recovery, layout fallback, secure input notice, smoke tests (manual checklist still open, see 03-testing.md).
+7. Install script, DMG, app icon. Notarization skipped (no Developer ID).
 
-## Decisions (defaults)
+## Decisions
 1. Arm default: Caps Lock.
-2. Space consumes a character.
-3. Distribution: just the owner first (Developer ID / local signing).
+2. Space consumes a character (a setting).
+3. Distribution: GitHub release DMG, signed with an Apple Development identity, not notarized; users click Open Anyway.
