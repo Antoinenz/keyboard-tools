@@ -26,3 +26,23 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.antoinenz.feeder
         ENABLE_APP_SANDBOX: NO
         GENERATE_INFOPLIST_FILE: NO
+  FeederTests:
+    type: bundle.unit-test
+    platform: macOS
+    # Pure-logic files are compiled straight into the tests (no app host needed).
+    sources:
+      - FeederTests
+      - Feeder/TextFeeder.swift
+      - Feeder/ArmKey.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.antoinenz.feeder.tests
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  Feeder:
+    build:
+      targets:
+        Feeder: all
+        FeederTests: [test]
+    test:
+      targets: [FeederTests]
