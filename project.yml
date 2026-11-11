@@ -1,0 +1,28 @@
+name: Feeder
+options:
+  bundleIdPrefix: com.antoinenz
+  deploymentTarget:
+    macOS: "14.0"
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    DEVELOPMENT_TEAM: V5944XY7RG
+    CODE_SIGN_STYLE: Automatic
+    ENABLE_HARDENED_RUNTIME: YES
+targets:
+  Feeder:
+    type: application
+    platform: macOS
+    sources: [Feeder]
+    info:
+      path: Feeder/Info.plist
+      properties:
+        CFBundleName: Feeder
+        CFBundleDisplayName: Feeder
+        LSUIElement: true
+        LSMinimumSystemVersion: "14.0"
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.antoinenz.feeder
+        ENABLE_APP_SANDBOX: NO
+        GENERATE_INFOPLIST_FILE: NO
