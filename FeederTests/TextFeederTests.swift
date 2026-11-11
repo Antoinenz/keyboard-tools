@@ -66,4 +66,18 @@ final class TextFeederTests: XCTestCase {
         XCTAssertNil(f.next())
         XCTAssertEqual(f.upcoming(), "")
     }
+
+    func testLoopingWrapsAround() {
+        var f = TextFeeder()
+        f.setText("ab")
+        XCTAssertEqual(f.nextLooping(), "a")
+        XCTAssertEqual(f.nextLooping(), "b")
+        XCTAssertEqual(f.index, 0)
+        XCTAssertEqual(f.nextLooping(), "a")
+    }
+
+    func testLoopingOnEmptyTextReturnsNil() {
+        var f = TextFeeder()
+        XCTAssertNil(f.nextLooping())
+    }
 }

@@ -22,6 +22,13 @@ struct TextFeeder {
         return c
     }
 
+    /// Like `next()`, but wraps back to the start after the last character.
+    mutating func nextLooping() -> Character? {
+        guard let c = next() else { return nil }
+        if isFinished { index = 0 }
+        return c
+    }
+
     mutating func back() {
         index = max(0, index - 1)
     }

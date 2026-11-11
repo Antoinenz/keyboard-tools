@@ -12,6 +12,7 @@ final class KeyTap {
     private static let returnKeyCode: CGKeyCode = 36
     private static let tabKeyCode: CGKeyCode = 48
     private static let escapeKeyCode: Int64 = 53
+    private static let deleteKeyCode: Int64 = 51
     /// Always disarms, whatever the arm key is set to.
     private static let panicFlags: CGEventFlags = [.maskControl, .maskAlternate, .maskCommand]
 
@@ -26,6 +27,11 @@ final class KeyTap {
     var setArmed: (Bool) -> Void = { _ in }
     /// Whether Space consumes a character.
     var spaceConsumes = true
+    /// Backspace deletes as usual and also steps the text pointer back.
+    var backspaceStepsBack = false
+    var stepBack: () -> Void = {}
+    /// Held keys type once. When false, each auto-repeat types the next character.
+    var ignoreAutoRepeat = true
     /// What arms/disarms the feeder.
     var armKey: ArmKey = .capsLock
     /// True while the user is recording a new arm key in Settings.
@@ -102,13 +108,11 @@ final class KeyTap {
         guard type == .keyDown else { return pass }
 
         let autorepeat = event.getIntegerValueField(.keyboardEventAutorepeat) != 0
-        if autorepeat, swallowed.contains(code) { return nil }
-
         let mods = event.flags.intersection(ArmKey.modifierMask)
 
         // Panic combo: always disarms.
         if code == Self.escapeKeyCode, mods == Self.panicFlags {
-            setArmed(false)
+            if !autorepeat { setArmed(false) }
             swallowed.insert(code)
             return nil
         }
@@ -116,7 +120,7 @@ final class KeyTap {
         if !hotkeysSuspended,
            case let .combo(keyCode, modifiers, _) = armKey,
            code == keyCode, mods.rawValue == modifiers {
-            setArmed(!isArmed())
+            if !autorepeat { setArmed(!isArmed()) }
             swallowed.insert(code)
             return nil
         }
@@ -129,9 +133,18 @@ final class KeyTap {
         }
         // Shortcuts keep working.
         if event.flags.contains(.maskCommand) || event.flags.contains(.maskControl) { return pass }
+
+        // Backspace: let it delete, and move the text pointer back with it.
+        if code == Self.deleteKeyCode, backspaceStepsBack, mods.isEmpty {
+            stepBack()
+            return pass
+        }
+
         guard isCharacterKey(code) else { return pass }
 
-        if autorepeat { return pass }
+        if autorepeat, ignoreAutoRepeat {
+            return swallowed.contains(code) ? nil : pass
+        }
 
         guard let ch = nextCharacter() else { return pass } // finished: type normally
         swallowed.insert(code)
