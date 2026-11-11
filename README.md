@@ -11,7 +11,7 @@ See [docs/](docs/) for the plan and the Windows/stack notes.
 | 3 Feeder model and tests | done |
 | 4 Arm key recorder, Caps Lock mode, panic disarm | done |
 | 5 Settings and polish | done |
-| 6 Hardening (sleep/wake, layout fallback, app testing) | next |
+| 6 Hardening (wake recovery, key-code fallback, secure input, smoke tests) | done (manual checklist in docs/03-testing.md) |
 | 7 Sign, notarize, DMG | todo |
 
 ## Build
