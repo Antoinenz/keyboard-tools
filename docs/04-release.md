@@ -2,6 +2,13 @@
 
 `scripts/release.sh` builds a Release `Feeder.app`, re-signs it with the hardened runtime and packages `dist/Feeder-<version>.dmg` (app plus an Applications shortcut). The version comes from `CFBundleShortVersionString` in `project.yml`.
 
+## Local install (the plan for now)
+The app is for local use, so skip notarization and run:
+```bash
+scripts/install.sh
+```
+It builds, signs with the Apple Development identity, copies to `/Applications` and launches. Grant Accessibility and Input Monitoring once for that copy, then "Launch at login" in Settings works. Rerun it to update; the grants survive because the identity and path stay the same.
+
 ## Current state
 Only an **Apple Development** certificate exists on the Mac, so the DMG is signed but not notarizable. It runs on the build Mac; on other Macs Gatekeeper will refuse it (`spctl` reports "rejected, origin=Apple Development"). A friend can still open it with right-click > Open, then allow it in System Settings > Privacy & Security.
 
