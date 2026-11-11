@@ -2,6 +2,7 @@ import SwiftUI
 
 struct PopoverView: View {
     @EnvironmentObject var state: AppState
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -30,14 +31,28 @@ struct PopoverView: View {
             Toggle("Armed", isOn: $state.armed)
                 .toggleStyle(.switch)
                 .disabled(!state.tapRunning)
-            Text("Spike: turning Caps Lock on or off also arms/disarms.")
+            Text(armHint)
                 .font(.caption).foregroundStyle(.secondary)
 
             Divider()
-            Button("Quit Feeder") { NSApplication.shared.terminate(nil) }
+            HStack {
+                Button("Settings…") {
+                    openWindow(id: "settings")
+                    NSApp.activate(ignoringOtherApps: true)
+                }
+                Spacer()
+                Button("Quit Feeder") { NSApplication.shared.terminate(nil) }
+            }
         }
         .padding(14)
         .frame(width: 340)
+    }
+
+    private var armHint: String {
+        switch state.armKey {
+        case .capsLock: return "Caps Lock on = armed. Panic disarm: ⌃⌥⌘Esc."
+        default: return "Press \(state.armKey.displayName) to arm or disarm. Panic disarm: ⌃⌥⌘Esc."
+        }
     }
 
     private var permissionsSection: some View {

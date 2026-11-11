@@ -11,5 +11,10 @@ struct FeederApp: App {
             Image(systemName: state.armed ? "keyboard.fill" : "keyboard")
         }
         .menuBarExtraStyle(.window)
+
+        Window("Feeder Settings", id: "settings") {
+            SettingsView().environmentObject(state)
+        }
+        .windowResizability(.contentSize)
     }
 }
